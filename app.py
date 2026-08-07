@@ -2,6 +2,7 @@ from datetime import datetime, date
 import io
 import os
 import sqlite3
+import urllib.request
 import pandas as pd
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -10,25 +11,33 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 import streamlit as st
 
-# Türkçe Karakter Destekli Font Kaydı (ReportLab)
+# Türkçe Karakter Destekli Font Kaydı (Linux / Streamlit Cloud & Windows Uyumlu)
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
-try:
-    font_path_regular = "C:\\Windows\\Fonts\\arial.ttf"
-    font_path_bold = "C:\\Windows\\Fonts\\arialbd.ttf"
 
-    if os.path.exists(font_path_regular) and os.path.exists(font_path_bold):
-        pdfmetrics.registerFont(TTFont("Arial-TR", font_path_regular))
-        pdfmetrics.registerFont(TTFont("Arial-TR-Bold", font_path_bold))
-        PDF_FONT_REGULAR = "Arial-TR"
-        PDF_FONT_BOLD = "Arial-TR-Bold"
-    else:
-        PDF_FONT_REGULAR = "Helvetica"
-        PDF_FONT_BOLD = "Helvetica-Bold"
-except Exception:
-    PDF_FONT_REGULAR = "Helvetica"
-    PDF_FONT_BOLD = "Helvetica-Bold"
+def register_turkish_font():
+    font_regular_path = "DejaVuSans.ttf"
+    font_bold_path = "DejaVuSans-Bold.ttf"
+
+    # Font dosyaları sunucuda yoksa indir
+    if not os.path.exists(font_regular_path):
+        url_regular = "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/master/ttf/DejaVuSans.ttf"
+        urllib.request.urlretrieve(url_regular, font_regular_path)
+
+    if not os.path.exists(font_bold_path):
+        url_bold = "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/master/ttf/DejaVuSans-Bold.ttf"
+        urllib.request.urlretrieve(url_bold, font_bold_path)
+
+    try:
+        pdfmetrics.registerFont(TTFont("DejaVu", font_regular_path))
+        pdfmetrics.registerFont(TTFont("DejaVu-Bold", font_bold_path))
+        return "DejaVu", "DejaVu-Bold"
+    except Exception:
+        return "Helvetica", "Helvetica-Bold"
+
+
+PDF_FONT_REGULAR, PDF_FONT_BOLD = register_turkish_font()
 
 # Sayfa Yapılandırması
 st.set_page_config(
@@ -98,7 +107,8 @@ def init_db():
             ad_soyad TEXT UNIQUE,
             birim_adi TEXT DEFAULT '',
             is_birim_sorumlusu INTEGER DEFAULT 0,
-            sifre TEXT DEFAULT '1111'
+            sifre TEXT DEFAULT '1111',
+            durum TEXT DEFAULT 'Aktif'
         )
     """)
 
@@ -133,6 +143,13 @@ def init_db():
     """)
 
     # Sütun Kontrolleri ve Güncellemeler
+    c.execute("PRAGMA table_info(personeller)")
+    cols_p = [col[1] for col in c.fetchall()]
+    if "durum" not in cols_p:
+        c.execute(
+            "ALTER TABLE personeller ADD COLUMN durum TEXT DEFAULT 'Aktif'"
+        )
+
     c.execute("PRAGMA table_info(birimler)")
     cols_b = [col[1] for col in c.fetchall()]
     if "birim_renk" not in cols_b:
@@ -151,12 +168,17 @@ def init_db():
 init_db()
 
 
-def get_personeller_data():
+def get_personeller_data(only_active=False):
     conn = sqlite3.connect("mesai_takip.db")
     c = conn.cursor()
-    c.execute(
-        "SELECT ad_soyad, birim_adi, is_birim_sorumlusu, sifre FROM personeller ORDER BY ad_soyad ASC"
-    )
+    if only_active:
+        c.execute(
+            "SELECT ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum FROM personeller WHERE durum = 'Aktif' ORDER BY ad_soyad ASC"
+        )
+    else:
+        c.execute(
+            "SELECT ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum FROM personeller ORDER BY ad_soyad ASC"
+        )
     rows = c.fetchall()
     conn.close()
     return rows
@@ -358,14 +380,24 @@ if "auth_user_name" not in st.session_state:
 if "sub_tab_index" not in st.session_state:
     st.session_state["sub_tab_index"] = 0
 
-personel_raw = get_personeller_data()
+personel_raw = get_personeller_data(only_active=False)
 personel_dict = {
-    row[0]: {"birim": row[1], "is_sorumlu": row[2], "sifre": row[3]}
+    row[0]: {
+        "birim": row[1],
+        "is_sorumlu": row[2],
+        "sifre": row[3],
+        "durum": row[4],
+    }
     for row in personel_raw
 }
-p_names = list(personel_dict.keys())
+
+active_personel_names = [
+    p_name for p_name, data in personel_dict.items() if data["durum"] == "Aktif"
+]
 sorumlu_listesi = [
-    p_name for p_name, data in personel_dict.items() if data["is_sorumlu"] == 1
+    p_name
+    for p_name, data in personel_dict.items()
+    if data["is_sorumlu"] == 1 and data["durum"] == "Aktif"
 ]
 
 # SOL MENÜ (SIDEBAR) - TÜM GİRİŞ SEÇENEKLERİ
@@ -385,7 +417,7 @@ with st.sidebar:
             st.subheader("👤 Personel Girişi")
             secilen_p = st.selectbox(
                 "Adınızı Seçiniz:",
-                options=p_names if p_names else ["-"],
+                options=active_personel_names if active_personel_names else ["-"],
                 index=None,
                 placeholder="Listeden isminizi seçin...",
                 key="side_p_select",
@@ -491,7 +523,6 @@ if st.session_state["auth_role"] is None:
     )
 
 elif st.session_state["auth_role"] == "PERSONEL":
-    # PERSONEL SADECE MESAİ GİRİŞ EKRANINI GÖRÜR
     st.success(
         f"👤 Hoş Geldiniz Sayın **{st.session_state['auth_user_name']}** ({st.session_state['auth_unit']})"
     )
@@ -765,7 +796,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
     tab2, tab3 = st.tabs(["📊 Çizelge Görüntüle", "🔐 Yönetici Paneli"])
 
     # ---------------------------------------------------------
-    # TAB 2: ÇİZELGE GÖRÜNTÜLEME
+    # TAB 2: ÇİZELGE GÖRÜNTÜLEME (SADECE AKTİF PERSONELLERİ FİLTRELER)
     # ---------------------------------------------------------
     with tab2:
         st.header("Mesai Takip Çizelgesi ve Raporlar")
@@ -776,21 +807,32 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
         )
         conn.close()
 
+        # Pasif personellerin geçmiş mesaileri raporda kalsın ama sadece aktifler listelenebilsin
         if st.session_state["auth_role"] == "SORUMLU":
             df = df[df["birimi"] == st.session_state["auth_unit"]]
+
+        # Sadece aktif personeller filtreleme listesinde görünür
+        cizelge_p_options = [
+            p for p in active_personel_names if p in df["personel_ad_soyad"].unique()
+        ]
 
         if not df.empty:
             col_f1, col_f2 = st.columns(2)
             with col_f1:
                 secilen_personel = st.selectbox(
-                    "Personel Filtrele (Tümü için boş bırakın):",
-                    options=["Tüm Personeller"] + list(df["personel_ad_soyad"].unique()),
+                    "Aktif Personelleri Filtrele (Tümü için boş bırakın):",
+                    options=["Tüm Personeller"] + cizelge_p_options,
                 )
 
             df_filtered = df.copy()
             if secilen_personel != "Tüm Personeller":
                 df_filtered = df_filtered[
                     df_filtered["personel_ad_soyad"] == secilen_personel
+                ]
+            else:
+                # Varsayılan listede pasif personellerin kayıtları görünmesin isteniyorsa:
+                df_filtered = df_filtered[
+                    df_filtered["personel_ad_soyad"].isin(active_personel_names)
                 ]
 
             hesaplanan_saatler = []
@@ -876,7 +918,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
             st.info("Kayıtlı mesai verisi bulunmamaktadır.")
 
     # ---------------------------------------------------------
-    # TAB 3: YÖNETİCİ PANELİ
+    # TAB 3: YÖNETİCİ PANELİ (PASİFE ALMA / SİLME YETKİSİ İLE)
     # ---------------------------------------------------------
     with tab3:
         st.header("Yönetici Kontrol Paneli")
@@ -939,7 +981,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
         )
         st.divider()
 
-        # PERSONEL VE BİRİM YÖNETİMİ (SADECE MÜDÜR)
+        # PERSONEL VE BİRİM YÖNETİMİ (PASİF YAPMA VE KALICI SİLME EKLENDİ)
         if "⚙️ Personel ve Birim Yönetimi" in selected_sub_tab:
             col_admin1, col_admin2 = st.columns(2)
 
@@ -971,7 +1013,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
                             conn = sqlite3.connect("mesai_takip.db")
                             c = conn.cursor()
                             c.execute(
-                                "INSERT INTO personeller (ad_soyad, birim_adi, is_birim_sorumlusu, sifre) VALUES (?, ?, ?, ?)",
+                                "INSERT INTO personeller (ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum) VALUES (?, ?, ?, ?, 'Aktif')",
                                 (
                                     yeni_p_ad.strip(),
                                     yeni_p_birim,
@@ -992,21 +1034,29 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
 
                 st.divider()
                 st.write(
-                    "**Mevcut Personeller & Şifre Değiştirme / Sıfırlama:**"
+                    "**Mevcut Personeller & Durum Yönetimi (Aktif/Pasif/Sil):**"
                 )
-                p_rows = get_personeller_data()
+                p_rows = get_personeller_data(only_active=False)
+
                 for p_item in p_rows:
-                    p_name, p_b, p_s, p_sifre = p_item
+                    p_name, p_b, p_s, p_sifre, p_durum = p_item
                     s_tag = " (Birim Sorumlusu)" if p_s == 1 else ""
-                    p_color = birim_renk_map.get(p_b, "#007bff")
+                    p_color = (
+                        birim_renk_map.get(p_b, "#007bff")
+                        if p_durum == "Aktif"
+                        else "#6c757d"
+                    )
+                    durum_tag = (
+                        "🟢 [AKTİF]" if p_durum == "Aktif" else "🔴 [PASİF/ESKİ]"
+                    )
 
                     st.markdown(
-                        f"<div style='border-left: 5px solid {p_color}; padding-left: 8px; font-weight: bold;'>{p_name} - {p_b}{s_tag}</div>",
+                        f"<div style='border-left: 5px solid {p_color}; padding-left: 8px; font-weight: bold;'>{durum_tag} {p_name} - {p_b}{s_tag}</div>",
                         unsafe_allow_html=True,
                     )
                     with st.expander(f"⚙️ {p_name} İşlemleri"):
                         st.write(
-                            f"**Mevcut Şifre:** `{p_sifre if p_sifre else '1111'}`"
+                            f"**Mevcut Şifre:** `{p_sifre if p_sifre else '1111'}` | **Durum:** `{p_durum}`"
                         )
 
                         col_up1, col_up2 = st.columns([2, 1])
@@ -1033,16 +1083,46 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
                                     st.success("Şifre güncellendi!")
                                     st.rerun()
 
-                        if st.button("Personeli Sil", key=f"del_p_{p_name}"):
-                            conn = sqlite3.connect("mesai_takip.db")
-                            c = conn.cursor()
-                            c.execute(
-                                "DELETE FROM personeller WHERE ad_soyad = ?",
-                                (p_name,),
+                        col_act1, col_act2 = st.columns(2)
+                        with col_act1:
+                            # AKTİF / PASİF YAPMA BUTONU
+                            yeni_durum_hedef = (
+                                "Pasif" if p_durum == "Aktif" else "Aktif"
                             )
-                            conn.commit()
-                            conn.close()
-                            st.rerun()
+                            btn_text = (
+                                "🔴 Personeli Pasife Al (Listeden Gizle)"
+                                if p_durum == "Aktif"
+                                else "🟢 Personeli Tekrar Aktif Yap"
+                            )
+
+                            if st.button(btn_text, key=f"toggle_p_{p_name}"):
+                                conn = sqlite3.connect("mesai_takip.db")
+                                c = conn.cursor()
+                                c.execute(
+                                    "UPDATE personeller SET durum = ? WHERE ad_soyad = ?",
+                                    (yeni_durum_hedef, p_name),
+                                )
+                                conn.commit()
+                                conn.close()
+                                st.rerun()
+
+                        with col_act2:
+                            # KALICI SİLME BUTONU
+                            if st.button(
+                                "🗑️ Kalıcı Olarak Sil", key=f"del_p_{p_name}"
+                            ):
+                                conn = sqlite3.connect("mesai_takip.db")
+                                c = conn.cursor()
+                                c.execute(
+                                    "DELETE FROM personeller WHERE ad_soyad = ?",
+                                    (p_name,),
+                                )
+                                conn.commit()
+                                conn.close()
+                                st.info(
+                                    f"'{p_name}' sistemden kalıcı olarak silindi."
+                                )
+                                st.rerun()
 
             with col_admin2:
                 st.subheader("🏢 Birim & Renk Yönetimi")
@@ -1371,8 +1451,6 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
                                                 m1_b,
                                                 o_bas,
                                                 o_bit,
-                                                m2_c,
-                                                m2_b,
                                                 m_bit,
                                                 f_mesai,
                                                 s_saat,
