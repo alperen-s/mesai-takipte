@@ -2,7 +2,6 @@ from datetime import datetime, date
 import io
 import os
 import sqlite3
-import urllib.request
 import pandas as pd
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -11,33 +10,37 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 import streamlit as st
 
-# Türkçe Karakter Destekli Font Kaydı (Linux / Streamlit Cloud & Windows Uyumlu)
+# ReportLab Font ve Türkçe Karakter Düzeltme
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 
-def register_turkish_font():
-    font_regular_path = "DejaVuSans.ttf"
-    font_bold_path = "DejaVuSans-Bold.ttf"
+# Türkçe Karakter Dönüştürücü (PDF Uyumlu)
+def tr_to_pdf_text(text):
+    if not isinstance(text, str):
+        return text
+    # Standard Helvetica Türkçe karakter haritalaması
+    subst = {
+        "ı": "i",
+        "İ": "I",
+        "ğ": "g",
+        "Ğ": "G",
+        "Ş": "S",
+        "ş": "s",
+        "Ç": "C",
+        "ç": "c",
+        "Ö": "O",
+        "ö": "o",
+        "Ü": "U",
+        "ü": "u",
+    }
+    for search, replace in subst.items():
+        text = text.replace(search, replace)
+    return text
 
-    # Font dosyaları sunucuda yoksa indir
-    if not os.path.exists(font_regular_path):
-        url_regular = "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/master/ttf/DejaVuSans.ttf"
-        urllib.request.urlretrieve(url_regular, font_regular_path)
 
-    if not os.path.exists(font_bold_path):
-        url_bold = "https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/master/ttf/DejaVuSans-Bold.ttf"
-        urllib.request.urlretrieve(url_bold, font_bold_path)
-
-    try:
-        pdfmetrics.registerFont(TTFont("DejaVu", font_regular_path))
-        pdfmetrics.registerFont(TTFont("DejaVu-Bold", font_bold_path))
-        return "DejaVu", "DejaVu-Bold"
-    except Exception:
-        return "Helvetica", "Helvetica-Bold"
-
-
-PDF_FONT_REGULAR, PDF_FONT_BOLD = register_turkish_font()
+PDF_FONT_REGULAR = "Helvetica"
+PDF_FONT_BOLD = "Helvetica-Bold"
 
 # Sayfa Yapılandırması
 st.set_page_config(
@@ -271,28 +274,34 @@ def generate_pdf(df_data):
 
     elements.append(
         Paragraph(
-            "Afyonkarahisar Sağlık Bilimleri Üniversitesi İktisadi İşletme Müdürlüğü",
+            tr_to_pdf_text(
+                "Afyonkarahisar Saglik Bilimleri Universitesi Iktisadi Isletme Mudurlugu"
+            ),
             title_style,
         )
     )
-    elements.append(Paragraph("Personel Mesai Takip Çizelgesi", title_style))
+    elements.append(
+        Paragraph(
+            tr_to_pdf_text("Personel Mesai Takip Cizelgesi"), title_style
+        )
+    )
     elements.append(Paragraph("<br/><br/>", styles["Normal"]))
 
     table_data = [[
-        Paragraph("Tarih", header_style),
-        Paragraph("Personel", header_style),
-        Paragraph("Birimi", header_style),
-        Paragraph("Mesai Başlangıç", header_style),
-        Paragraph("1. Mola Çıkış", header_style),
-        Paragraph("1. Mola Bitiş", header_style),
-        Paragraph("Öğle Başlangıç", header_style),
-        Paragraph("Öğle Bitiş", header_style),
-        Paragraph("2. Mola Çıkış", header_style),
-        Paragraph("2. Mola Bitiş", header_style),
-        Paragraph("Mesai Bitiş", header_style),
-        Paragraph("Çalışma Süresi", header_style),
-        Paragraph("Fazla Mesai", header_style),
-        Paragraph("İmza", header_style),
+        Paragraph(tr_to_pdf_text("Tarih"), header_style),
+        Paragraph(tr_to_pdf_text("Personel"), header_style),
+        Paragraph(tr_to_pdf_text("Birimi"), header_style),
+        Paragraph(tr_to_pdf_text("Mesai Başlangıç"), header_style),
+        Paragraph(tr_to_pdf_text("1. Mola Çıkış"), header_style),
+        Paragraph(tr_to_pdf_text("1. Mola Bitiş"), header_style),
+        Paragraph(tr_to_pdf_text("Öğle Başlangıç"), header_style),
+        Paragraph(tr_to_pdf_text("Öğle Bitiş"), header_style),
+        Paragraph(tr_to_pdf_text("2. Mola Çıkış"), header_style),
+        Paragraph(tr_to_pdf_text("2. Mola Bitiş"), header_style),
+        Paragraph(tr_to_pdf_text("Mesai Bitiş"), header_style),
+        Paragraph(tr_to_pdf_text("Çalışma Süresi"), header_style),
+        Paragraph(tr_to_pdf_text("Fazla Mesai"), header_style),
+        Paragraph(tr_to_pdf_text("İmza"), header_style),
     ]]
 
     toplam_saat_aylik = 0.0
@@ -304,19 +313,23 @@ def generate_pdf(df_data):
         toplam_saat_aylik += s_saat
 
         table_data.append([
-            Paragraph(str(row["tarih"]), cell_style),
-            Paragraph(str(row["personel_ad_soyad"]), cell_style),
-            Paragraph(str(row["birimi"]), cell_style),
-            Paragraph(str(row["mesai_baslangic"]), cell_style),
-            Paragraph(str(row["mola1_cikis"]), cell_style),
-            Paragraph(str(row["mola1_bitis"]), cell_style),
-            Paragraph(str(row["ogle_baslangic"]), cell_style),
-            Paragraph(str(row["ogle_bitis"]), cell_style),
-            Paragraph(str(row["mola2_cikis"]), cell_style),
-            Paragraph(str(row["mola2_bitis"]), cell_style),
-            Paragraph(str(row["mesai_bitis"]), cell_style),
-            Paragraph(str(s_metin), cell_style),
-            Paragraph(str(row["fazla_mesai"]), cell_style),
+            Paragraph(tr_to_pdf_text(str(row["tarih"])), cell_style),
+            Paragraph(
+                tr_to_pdf_text(str(row["personel_ad_soyad"])), cell_style
+            ),
+            Paragraph(tr_to_pdf_text(str(row["birimi"])), cell_style),
+            Paragraph(
+                tr_to_pdf_text(str(row["mesai_baslangic"])), cell_style
+            ),
+            Paragraph(tr_to_pdf_text(str(row["mola1_cikis"])), cell_style),
+            Paragraph(tr_to_pdf_text(str(row["mola1_bitis"])), cell_style),
+            Paragraph(tr_to_pdf_text(str(row["ogle_baslangic"])), cell_style),
+            Paragraph(tr_to_pdf_text(str(row["ogle_bitis"])), cell_style),
+            Paragraph(tr_to_pdf_text(str(row["mola2_cikis"])), cell_style),
+            Paragraph(tr_to_pdf_text(str(row["mola2_bitis"])), cell_style),
+            Paragraph(tr_to_pdf_text(str(row["mesai_bitis"])), cell_style),
+            Paragraph(tr_to_pdf_text(str(s_metin)), cell_style),
+            Paragraph(tr_to_pdf_text(str(row["fazla_mesai"])), cell_style),
             Paragraph("", cell_style),
         ])
 
@@ -337,7 +350,9 @@ def generate_pdf(df_data):
     elements.append(Paragraph("<br/>", styles["Normal"]))
     elements.append(
         Paragraph(
-            f"<b>Çizelge Dönemi Toplam Çalışma Süresi:</b> {round(toplam_saat_aylik, 2)} Saat &nbsp;&nbsp;&nbsp;&nbsp;",
+            tr_to_pdf_text(
+                f"Cizelge Donemi Toplam Calisma Suresi: {round(toplam_saat_aylik, 2)} Saat"
+            ),
             summary_style,
         )
     )
@@ -345,12 +360,17 @@ def generate_pdf(df_data):
     elements.append(Paragraph("<br/><br/>", styles["Normal"]))
     onay_data = [
         [
-            Paragraph("<b>Personel/Birim Sorumlusu Onayı</b>", header_style),
-            Paragraph("<b>İşletme Müdürü Onayı</b>", header_style),
+            Paragraph(
+                tr_to_pdf_text("<b>Personel/Birim Sorumlusu Onayı</b>"),
+                header_style,
+            ),
+            Paragraph(
+                tr_to_pdf_text("<b>İşletme Müdürü Onayı</b>"), header_style
+            ),
         ],
         [
-            Paragraph("<br/><br/>...........................<br/>İmza", cell_style),
-            Paragraph("<br/><br/>...........................<br/>İmza", cell_style),
+            Paragraph("<br/><br/>...........................<br/>Imza", cell_style),
+            Paragraph("<br/><br/>...........................<br/>Imza", cell_style),
         ],
     ]
     onay_table = Table(onay_data, colWidths=[350, 350])
@@ -796,7 +816,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
     tab2, tab3 = st.tabs(["📊 Çizelge Görüntüle", "🔐 Yönetici Paneli"])
 
     # ---------------------------------------------------------
-    # TAB 2: ÇİZELGE GÖRÜNTÜLEME (SADECE AKTİF PERSONELLERİ FİLTRELER)
+    # TAB 2: ÇİZELGE GÖRÜNTÜLEME
     # ---------------------------------------------------------
     with tab2:
         st.header("Mesai Takip Çizelgesi ve Raporlar")
@@ -807,11 +827,9 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
         )
         conn.close()
 
-        # Pasif personellerin geçmiş mesaileri raporda kalsın ama sadece aktifler listelenebilsin
         if st.session_state["auth_role"] == "SORUMLU":
             df = df[df["birimi"] == st.session_state["auth_unit"]]
 
-        # Sadece aktif personeller filtreleme listesinde görünür
         cizelge_p_options = [
             p for p in active_personel_names if p in df["personel_ad_soyad"].unique()
         ]
@@ -830,7 +848,6 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
                     df_filtered["personel_ad_soyad"] == secilen_personel
                 ]
             else:
-                # Varsayılan listede pasif personellerin kayıtları görünmesin isteniyorsa:
                 df_filtered = df_filtered[
                     df_filtered["personel_ad_soyad"].isin(active_personel_names)
                 ]
@@ -918,7 +935,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
             st.info("Kayıtlı mesai verisi bulunmamaktadır.")
 
     # ---------------------------------------------------------
-    # TAB 3: YÖNETİCİ PANELİ (PASİFE ALMA / SİLME YETKİSİ İLE)
+    # TAB 3: YÖNETİCİ PANELİ
     # ---------------------------------------------------------
     with tab3:
         st.header("Yönetici Kontrol Paneli")
@@ -981,7 +998,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
         )
         st.divider()
 
-        # PERSONEL VE BİRİM YÖNETİMİ (PASİF YAPMA VE KALICI SİLME EKLENDİ)
+        # PERSONEL VE BİRİM YÖNETİMİ
         if "⚙️ Personel ve Birim Yönetimi" in selected_sub_tab:
             col_admin1, col_admin2 = st.columns(2)
 
@@ -1085,7 +1102,6 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
 
                         col_act1, col_act2 = st.columns(2)
                         with col_act1:
-                            # AKTİF / PASİF YAPMA BUTONU
                             yeni_durum_hedef = (
                                 "Pasif" if p_durum == "Aktif" else "Aktif"
                             )
@@ -1107,7 +1123,6 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
                                 st.rerun()
 
                         with col_act2:
-                            # KALICI SİLME BUTONU
                             if st.button(
                                 "🗑️ Kalıcı Olarak Sil", key=f"del_p_{p_name}"
                             ):
