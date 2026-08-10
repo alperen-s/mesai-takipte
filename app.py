@@ -55,12 +55,10 @@ def hesapla_calisma_suresi(baslangic_str, bitis_str):
     except Exception:
         return 0.0, "-"
 
-# HATA VERMEYEN GÜVENLİ VERİTABANI BAŞLATMA
 def init_db():
     conn = sqlite3.connect("mesai_takip.db", timeout=10)
     c = conn.cursor()
 
-    # 1. TABLOLARI OLUŞTUR
     c.execute("""
         CREATE TABLE IF NOT EXISTS mesai_kayitlari (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,7 +123,6 @@ def init_db():
         )
     """)
 
-    # 2. SÜTUN KONTROLLERİ (TRY-EXCEPT İLE SESSİZCE GEÇ)
     try:
         c.execute("ALTER TABLE personeller ADD COLUMN durum TEXT DEFAULT 'Aktif'")
     except Exception:
@@ -505,8 +502,8 @@ elif st.session_state["auth_role"] == "PERSONEL":
                                 INSERT INTO duzeltme_talepleri 
                                 (mesai_id, personel_ad_soyad, tarih, birimi, mesai_baslangic, mola1_cikis, mola1_bitis, 
                                  ogle_baslangic, ogle_bitis, mola2_cikis, mola2_bitis, mesai_bitis, fazla_mesai,
-                                 calisma_suresi_saat, calisma_suresi_metin)
-                                VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 calisma_suresi_saat, calisma_suresi_metin, durum)
+                                VALUES (0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Bekliyor')
                             """, (p_ad_active, str(tarih), p_birim_active, mesai_baslangic, mola1_cikis, mola1_bitis,
                                   ogle_baslangic, ogle_bitis, mola2_cikis, mola2_bitis, mesai_bitis, fazla_mesai,
                                   sure_saat, sure_metin))
@@ -522,9 +519,9 @@ elif st.session_state["auth_role"] == "PERSONEL":
                             INSERT INTO duzeltme_talepleri 
                             (mesai_id, personel_ad_soyad, tarih, birimi, mesai_baslangic, mola1_cikis, mola1_bitis, 
                              ogle_baslangic, ogle_bitis, mola2_cikis, mola2_bitis, mesai_bitis, fazla_mesai,
-                             calisma_suresi_saat, calisma_suresi_metin)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (m_id, p_ad_active, p_birim_active, mesai_baslangic, mola1_cikis, mola1_bitis,
+                             calisma_suresi_saat, calisma_suresi_metin, durum)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Bekliyor')
+                        """, (m_id, p_ad_active, str(tarih), p_birim_active, mesai_baslangic, mola1_cikis, mola1_bitis,
                               ogle_baslangic, ogle_bitis, mola2_cikis, mola2_bitis, mesai_bitis, fazla_mesai,
                               sure_saat, sure_metin))
                         conn.commit()
