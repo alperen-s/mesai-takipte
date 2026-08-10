@@ -2,6 +2,7 @@ from datetime import datetime, date
 import io
 import os
 import sqlite3
+import urllib.parse
 import pandas as pd
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -21,6 +22,20 @@ def tr_to_pdf_text(text):
     for search, replace in subst.items():
         text = text.replace(search, replace)
     return text
+
+# WhatsApp Link Oluşturucu Yardımcı Fonksiyon
+def make_whatsapp_link(phone_number, message):
+    if not phone_number or str(phone_number).strip() in ["", "nan", "None"]:
+        return None
+    
+    clean_phone = "".join(filter(str.isdigit, str(phone_number)))
+    if clean_phone.startswith("0"):
+        clean_phone = "90" + clean_phone[1:]
+    elif not clean_phone.startswith("90"):
+        clean_phone = "90" + clean_phone
+        
+    encoded_message = urllib.parse.quote(message)
+    return f"https://wa.me/{clean_phone}?text={encoded_message}"
 
 PDF_FONT_REGULAR = "Helvetica"
 PDF_FONT_BOLD = "Helvetica-Bold"
@@ -89,7 +104,8 @@ def init_db():
             birim_adi TEXT DEFAULT '',
             is_birim_sorumlusu INTEGER DEFAULT 0,
             sifre TEXT DEFAULT '1111',
-            durum TEXT DEFAULT 'Aktif'
+            durum TEXT DEFAULT 'Aktif',
+            telefon TEXT DEFAULT ''
         )
     """)
 
@@ -129,12 +145,12 @@ def init_db():
         pass
 
     try:
-        c.execute("ALTER TABLE birimler ADD COLUMN birim_renk TEXT DEFAULT '#007bff'")
+        c.execute("ALTER TABLE personeller ADD COLUMN telefon TEXT DEFAULT ''")
     except Exception:
         pass
 
     try:
-        c.execute("UPDATE personeller SET sifre = '1111' WHERE sifre IS NULL OR sifre = ''")
+        c.execute("ALTER TABLE birimler ADD COLUMN birim_renk TEXT DEFAULT '#007bff'")
     except Exception:
         pass
 
@@ -147,9 +163,9 @@ def get_personeller_data(only_active=False):
     conn = sqlite3.connect("mesai_takip.db", timeout=10)
     c = conn.cursor()
     if only_active:
-        c.execute("SELECT ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum FROM personeller WHERE durum = 'Aktif' ORDER BY ad_soyad ASC")
+        c.execute("SELECT ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum, telefon FROM personeller WHERE durum = 'Aktif' ORDER BY ad_soyad ASC")
     else:
-        c.execute("SELECT ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum FROM personeller ORDER BY ad_soyad ASC")
+        c.execute("SELECT ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum, telefon FROM personeller ORDER BY ad_soyad ASC")
     rows = c.fetchall()
     conn.close()
     return rows
@@ -279,7 +295,7 @@ if "sub_tab_index" not in st.session_state:
 
 personel_raw = get_personeller_data(only_active=False)
 personel_dict = {
-    row[0]: {"birim": row[1], "is_sorumlu": row[2], "sifre": row[3], "durum": row[4]}
+    row[0]: {"birim": row[1], "is_sorumlu": row[2], "sifre": row[3], "durum": row[4], "telefon": row[5]}
     for row in personel_raw
 }
 
@@ -566,7 +582,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
 
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
-                excel_data = df_display.to_csv(index=False).encode("utf-8-sig")
+                excel_data = df_display.to_csv(index=False, sep=";").encode("utf-8-sig")
                 st.download_button(label="📥 Excel / CSV Olarak İndir", data=excel_data, file_name="mesai_takip_cizelgesi.csv", mime="text/csv", use_container_width=True)
             with col_btn2:
                 pdf_buffer = generate_pdf(df_filtered)
@@ -619,26 +635,22 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
         st.divider()
 
         if "⚙️ Personel ve Birim Yönetimi" in selected_sub_tab:
-            # TOPLU EXCEL YÜKLEME ALANI
+            # TOPLU EXCEL/CSV YÜKLEME ALANI
             with st.expander("📁 Excel / CSV ile Toplu Personel ve Birim Yükle", expanded=False):
                 st.write("Toplu personel eklemek için hazırladığınız Excel (`.xlsx`) veya CSV dosyasını aşağıdan yükleyebilirsiniz.")
                 st.caption("Not: Dosyadaki birim adı veritabanında yoksa otomatik olarak yeni birim olarak oluşturulacaktır.")
 
-                # Şablon İndirme Butonu (Gerçek XLSX dosyası üretir)
                 sample_df = pd.DataFrame([
-                    {"Ad Soyad": "Ahmet Yılmaz", "Birim Adı": "AFSÜ Cafe", "Birim Sorumlusu": "Evet", "Şifre": "1234"},
-                    {"Ad Soyad": "Mehmet Demir", "Birim Adı": "Sağlık Cafe", "Birim Sorumlusu": "Hayır", "Şifre": "1111"},
+                    {"Ad Soyad": "Ahmet Yılmaz", "Birim Adı": "AFSÜ Cafe", "Birim Sorumlusu": "Evet", "Şifre": "1234", "Telefon": "05551234567"},
+                    {"Ad Soyad": "Mehmet Demir", "Birim Adı": "Sağlık Cafe", "Birim Sorumlusu": "Hayır", "Şifre": "1111", "Telefon": "05329876543"},
                 ])
-                excel_buffer = io.BytesIO()
-                with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-                    sample_df.to_excel(writer, index=False, sheet_name="Personeller")
-                excel_buffer.seek(0)
+                sample_csv = sample_df.to_csv(index=False, sep=";").encode("utf-8-sig")
 
                 st.download_button(
-                    label="📥 Örnek Yükleme Şablonunu İndir (.xlsx)",
-                    data=excel_buffer,
-                    file_name="ornek_personel_sablonu.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    label="📥 Örnek Yükleme Şablonunu İndir (.csv)",
+                    data=sample_csv,
+                    file_name="ornek_personel_sablonu.csv",
+                    mime="text/csv"
                 )
 
                 uploaded_file = st.file_uploader("Excel veya CSV Dosyası Seçin", type=["xlsx", "csv"])
@@ -646,7 +658,14 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                 if uploaded_file is not None:
                     try:
                         if uploaded_file.name.endswith(".csv"):
-                            df_upload = pd.read_csv(uploaded_file)
+                            try:
+                                df_upload = pd.read_csv(uploaded_file, sep=";")
+                                if len(df_upload.columns) <= 1:
+                                    uploaded_file.seek(0)
+                                    df_upload = pd.read_csv(uploaded_file, sep=",")
+                            except Exception:
+                                uploaded_file.seek(0)
+                                df_upload = pd.read_csv(uploaded_file, sep=",")
                         else:
                             df_upload = pd.read_excel(uploaded_file)
 
@@ -666,19 +685,18 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                                 b_adi = str(row.get("Birim Adı", "")).strip()
                                 sorumlu_raw = str(row.get("Birim Sorumlusu", "Hayır")).strip().lower()
                                 p_sifre = str(row.get("Şifre", "1111")).strip()
+                                p_tel = str(row.get("Telefon", "")).strip()
 
                                 if not p_ad or p_ad == "nan" or not b_adi or b_adi == "nan":
                                     continue
 
                                 is_sorumlu = 1 if sorumlu_raw in ["evet", "1", "true", "evet "] else 0
 
-                                # 1. Birim Yoksa Otomatik Ekle
                                 c.execute("SELECT id FROM birimler WHERE birim_adi = ?", (b_adi,))
                                 if not c.fetchone():
                                     c.execute("INSERT INTO birimler (birim_adi, birim_renk) VALUES (?, '#007bff')", (b_adi,))
                                     eklenen_b += 1
 
-                                # 2. Birim Sorumlusu Kontrolü
                                 if is_sorumlu == 1:
                                     c.execute("SELECT ad_soyad FROM personeller WHERE birim_adi = ? AND is_birim_sorumlusu = 1 AND durum = 'Aktif'", (b_adi,))
                                     mevcut_s = c.fetchone()
@@ -686,12 +704,11 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                                         hata_mesajlari.append(f"⚠️ `{p_ad}` kişisi `{b_adi}` için sorumlu yapılamadı. Zaten aktif sorumlu: **{mevcut_s[0]}**")
                                         is_sorumlu = 0
 
-                                # 3. Personeli Ekle
                                 try:
                                     c.execute("""
-                                        INSERT INTO personeller (ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum)
-                                        VALUES (?, ?, ?, ?, 'Aktif')
-                                    """, (p_ad, b_adi, is_sorumlu, p_sifre if p_sifre != "nan" else "1111"))
+                                        INSERT INTO personeller (ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum, telefon)
+                                        VALUES (?, ?, ?, ?, 'Aktif', ?)
+                                    """, (p_ad, b_adi, is_sorumlu, p_sifre if p_sifre != "nan" else "1111", p_tel if p_tel != "nan" else ""))
                                     eklenen_p += 1
                                 except sqlite3.IntegrityError:
                                     hata_mesajlari.append(f"ℹ️ `{p_ad}` zaten veritabanında kayıtlı olduğu için atlandı.")
@@ -716,6 +733,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                 st.subheader("👨‍💼 Tekli Personel Tanımlama")
                 yeni_p_ad = st.text_input("Yeni Personel Adı Soyadı")
                 yeni_p_birim = st.selectbox("Bağlı Olduğu Birim", options=birimler_list if birimler_list else ["-"])
+                yeni_p_tel = st.text_input("Telefon Numarası (Örn: 05551234567)")
                 yeni_p_sorumlu = st.checkbox("Bu Personel Birim Sorumlusudur")
                 yeni_p_sifre = st.text_input("Giriş Şifresi (Boş bırakılırsa varsayılan: 1111)", type="password")
 
@@ -734,8 +752,8 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
 
                         try:
                             sifre_val = yeni_p_sifre.strip() if yeni_p_sifre.strip() else "1111"
-                            c.execute("INSERT INTO personeller (ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum) VALUES (?, ?, ?, ?, 'Aktif')",
-                                      (yeni_p_ad.strip(), yeni_p_birim, 1 if yeni_p_sorumlu else 0, sifre_val))
+                            c.execute("INSERT INTO personeller (ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum, telefon) VALUES (?, ?, ?, ?, 'Aktif', ?)",
+                                      (yeni_p_ad.strip(), yeni_p_birim, 1 if yeni_p_sorumlu else 0, sifre_val, yeni_p_tel.strip()))
                             conn.commit()
                             conn.close()
                             st.success(f"'{yeni_p_ad}' başarıyla eklendi.")
@@ -751,29 +769,30 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                 p_rows = get_personeller_data(only_active=False)
 
                 for p_item in p_rows:
-                    p_name, p_b, p_s, p_sifre, p_durum = p_item
+                    p_name, p_b, p_s, p_sifre, p_durum, p_tel = p_item
                     s_tag = " (Birim Sorumlusu)" if p_s == 1 else ""
                     p_color = birim_renk_map.get(p_b, "#007bff") if p_durum == "Aktif" else "#6c757d"
                     durum_tag = "🟢 [AKTİF]" if p_durum == "Aktif" else "🔴 [PASİF/ESKİ]"
 
                     st.markdown(f"<div style='border-left: 5px solid {p_color}; padding-left: 8px; font-weight: bold;'>{durum_tag} {p_name} - {p_b}{s_tag}</div>", unsafe_allow_html=True)
                     with st.expander(f"⚙️ {p_name} İşlemleri"):
-                        st.write(f"**Mevcut Şifre:** `{p_sifre if p_sifre else '1111'}` | **Durum:** `{p_durum}`")
+                        st.write(f"**Mevcut Şifre:** `{p_sifre if p_sifre else '1111'}` | **Telefon:** `{p_tel if p_tel else 'Kayıtlı Değil'}` | **Durum:** `{p_durum}`")
 
                         col_up1, col_up2 = st.columns([2, 1])
                         with col_up1:
                             guncel_sifre = st.text_input("Yeni Şifre Belirle", key=f"pass_field_{p_name}", type="password")
+                            guncel_tel = st.text_input("Telefon Güncelle", value=p_tel if p_tel else "", key=f"tel_field_{p_name}")
                         with col_up2:
                             st.write("<br/>", unsafe_allow_html=True)
-                            if st.button("Şifre Güncelle", key=f"btn_pass_{p_name}"):
-                                if guncel_sifre.strip():
-                                    conn = sqlite3.connect("mesai_takip.db", timeout=10)
-                                    c = conn.cursor()
-                                    c.execute("UPDATE personeller SET sifre = ? WHERE ad_soyad = ?", (guncel_sifre.strip(), p_name))
-                                    conn.commit()
-                                    conn.close()
-                                    st.success("Şifre güncellendi!")
-                                    st.rerun()
+                            if st.button("Bilgileri Güncelle", key=f"btn_pass_{p_name}"):
+                                conn = sqlite3.connect("mesai_takip.db", timeout=10)
+                                c = conn.cursor()
+                                new_p_val = guncel_sifre.strip() if guncel_sifre.strip() else p_sifre
+                                c.execute("UPDATE personeller SET sifre = ?, telefon = ? WHERE ad_soyad = ?", (new_p_val, guncel_tel.strip(), p_name))
+                                conn.commit()
+                                conn.close()
+                                st.success("Bilgiler güncellendi!")
+                                st.rerun()
 
                         col_act1, col_act2 = st.columns(2)
                         with col_act1:
@@ -863,8 +882,15 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                     st.markdown(f"<div style='border-left: 6px solid {b_color}; padding-left: 6px; margin-top: 10px;'><b>{row['birimi']}</b></div>", unsafe_allow_html=True)
 
                     with st.expander(f"{durum_etiketi} {fm_etiketi} 📌 {row['tarih']} - {row['personel_ad_soyad']} ({row['birimi']})", expanded=onay_bekliyor_mu):
+                        p_tel = personel_dict.get(row["personel_ad_soyad"], {}).get("telefon", "")
+                        
                         if row["fazla_mesai"] == "Yaptım":
                             st.error("🚨 **FAZLA MESAİ BİLDİRİMİ:** Personel bugün fazla mesai yaptığını bildirdi.")
+                            if p_tel:
+                                fm_msg = f"Sayın {row['personel_ad_soyad']}, {row['tarih']} tarihli mesai kaydınızda bildirmiş olduğunuz Fazla Mesai girişi incelemeye alınmıştır."
+                                fm_link = make_whatsapp_link(p_tel, fm_msg)
+                                if fm_link:
+                                    st.markdown(f"[💬 Personele Fazla Mesai Hakkında WhatsApp Mesajı Gönder]({fm_link})")
 
                         s_saat, s_metin = hesapla_calisma_suresi(row["mesai_baslangic"], row["mesai_bitis"])
                         st.write(f"**Giriş:** {row['mesai_baslangic']} | **Çıkış:** {row['mesai_bitis']} | **Günlük Çalışma:** **{s_metin}** | **Fazla Mesai:** **{row['fazla_mesai']}**")
@@ -937,6 +963,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                     s_saat, s_metin = hesapla_calisma_suresi(m_bas, m_bit)
                     fm_etiketi = "🔴 **[FAZLA MESAİ VAR]**" if f_mesai == "Yaptım" else ""
                     b_color = birim_renk_map.get(birim, "#007bff")
+                    p_tel = personel_dict.get(p_ad, {}).get("telefon", "")
 
                     st.markdown(f"<div style='border-left: 6px solid {b_color}; padding-left: 6px; margin-top: 10px;'><b>{birim}</b></div>", unsafe_allow_html=True)
                     with st.expander(f"📩 Düzeltme Talebi: {t_tarih} - {p_ad} ({birim}) {fm_etiketi}", expanded=True):
@@ -989,7 +1016,21 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                                     c.execute("DELETE FROM duzeltme_talepleri WHERE id = ?", (t_id,))
                                     conn.commit()
                                     conn.close()
-                                    st.info("Talep reddedildi ve silindi.")
+                                    st.session_state[f"last_rejected_{t_id}"] = {"p_ad": p_ad, "t_tarih": t_tarih, "p_tel": p_tel}
                                     st.rerun()
+
+                        # Red Sonrası WhatsApp İletişim Butonu Gösterimi
+                        if f"last_rejected_{t_id}" in st.session_state:
+                            rej_info = st.session_state[f"last_rejected_{t_id}"]
+                            st.warning(f"⚠️ `{rej_info['p_ad']}` kişisinin `{rej_info['t_tarih']}` tarihli düzeltme talebi reddedildi.")
+                            
+                            red_msg = f"Sayın {rej_info['p_ad']}, {rej_info['t_tarih']} tarihli mesai düzeltme/güncelleme talebiniz yöneticiniz tarafından uygun görülmeyerek REDDEDİLMİŞTİR."
+                            wa_link = make_whatsapp_link(rej_info["p_tel"], red_msg)
+                            
+                            if wa_link:
+                                st.markdown(f"👉 [💬 Personele WhatsApp ile Red Mesajı Gönder]({wa_link})")
+                            else:
+                                st.info("ℹ️ Personelin telefon numarası sistemde kayıtlı olmadığı için WhatsApp yönlendirme linki oluşturulamadı.")
+
             else:
                 st.info("Bekleyen düzeltme veya güncelleme talebi bulunmamaktadır.")
