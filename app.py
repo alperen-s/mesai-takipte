@@ -290,7 +290,6 @@ with st.sidebar:
     st.header("🔑 Giriş Paneli")
 
     if st.session_state["auth_role"] is None:
-        # İsim Seçimi (Listede İşletme Müdürü de var)
         tum_giris_secenekleri = ["İşletme Müdürü"] + active_personel_names
         
         secilen_kullanici = st.selectbox(
@@ -315,7 +314,6 @@ with st.sidebar:
             if not secilen_kullanici:
                 st.error("Lütfen adınızı seçiniz!")
             else:
-                # 1. İŞLETME MÜDÜRÜ GİRİŞİ
                 if secilen_kullanici == "İşletme Müdürü":
                     if pass_in == YONETICI_SIFRESI:
                         st.session_state["auth_role"] = "MUDUR"
@@ -326,19 +324,11 @@ with st.sidebar:
                         st.rerun()
                     else:
                         st.error("Hatalı Müdür Şifresi!")
-                
-                # 2. PERSONEL VEYA BİRİM SORUMLUSU GİRİŞİ
                 else:
                     dogru_pass = personel_dict[secilen_kullanici]["sifre"]
                     if pass_in == dogru_pass:
                         is_sorumlu = personel_dict[secilen_kullanici]["is_sorumlu"] == 1
-                        
-                        # Rol Otomatik Belirlenir
-                        if is_sorumlu:
-                            st.session_state["auth_role"] = "SORUMLU"
-                        else:
-                            st.session_state["auth_role"] = "PERSONEL"
-
+                        st.session_state["auth_role"] = "SORUMLU" if is_sorumlu else "PERSONEL"
                         st.session_state["auth_unit"] = p_birim_auto
                         st.session_state["auth_user_name"] = secilen_kullanici
                         st.session_state["sub_tab_index"] = 0
@@ -361,11 +351,9 @@ with st.sidebar:
             st.session_state["sub_tab_index"] = 0
             st.rerun()
 
-# BAŞLIK
 st.title("🏛️ AFSÜ İktisadi İşletme Müdürlüğü")
 st.caption("Personel Mesai Takip ve Yönetim Sistemi")
 
-# GİRİŞ YAPILMADIYSA VEYA ROLÜNE GÖRE EKRANLARI YÜKLE
 if st.session_state["auth_role"] is None:
     st.info("👈 **Lütfen sağ tarafı görüntülemek için sol taraftaki menüden kullanıcı adınız ve şifrenizle giriş yapınız.**")
 
@@ -644,10 +632,20 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
 
                 if st.button("Personel Ekle"):
                     if yeni_p_ad.strip() and yeni_p_birim != "-":
+                        conn = sqlite3.connect("mesai_takip.db", timeout=10)
+                        c = conn.cursor()
+                        
+                        # --- TEK BİRİM SORUMLUSU KONTROLÜ ---
+                        if yeni_p_sorumlu:
+                            c.execute("SELECT ad_soyad FROM personeller WHERE birim_adi = ? AND is_birim_sorumlusu = 1 AND durum = 'Aktif'", (yeni_p_birim,))
+                            mevcut_sorumlu = c.fetchone()
+                            if mevcut_sorumlu:
+                                st.error(f"🛑 **ENGELLEME:** `{yeni_p_birim}` biriminde zaten aktif bir Birim Sorumlusu bulunmaktadır: **{mevcut_sorumlu[0]}**. Bir birime sadece 1 adet Birim Sorumlusu atanabilir!")
+                                conn.close()
+                                st.stop()
+
                         try:
                             sifre_val = yeni_p_sifre.strip() if yeni_p_sifre.strip() else "1111"
-                            conn = sqlite3.connect("mesai_takip.db", timeout=10)
-                            c = conn.cursor()
                             c.execute("INSERT INTO personeller (ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum) VALUES (?, ?, ?, ?, 'Aktif')",
                                       (yeni_p_ad.strip(), yeni_p_birim, 1 if yeni_p_sorumlu else 0, sifre_val))
                             conn.commit()
@@ -655,6 +653,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                             st.success(f"'{yeni_p_ad}' başarıyla eklendi.")
                             st.rerun()
                         except sqlite3.IntegrityError:
+                            conn.close()
                             st.error("Bu personel zaten kayıtlı!")
                     else:
                         st.error("Lütfen ad soyad girip geçerli bir birim seçiniz.")
