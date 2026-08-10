@@ -1449,7 +1449,21 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANI (ÇİZELGE VE YÖNETİCİ PANELİ A
                                     req_bs_onay = 1 if p_is_sorumlu else 0
 
                                     if m_id == 0:
-                                        c.execute(
+                                       # Hata veren satırı bulun (yaklaşık 1452. satır)
+try:
+    c.execute(
+        # ... SQL sorgunuz ...
+    )
+    # Hata oluşmazsa işlem başarılı demektir.
+    # commit() işlemini unutmayın:
+    # conn.commit()
+except sqlite3.ProgrammingError as e:
+    # Hatayı yakalayın ve konsola yazdırın
+    # Bu, hatanın tam nedenini görmenizi sağlar
+    print(f"SQL Hatası: {e}")
+    # Kullanıcıya bir hata mesajı gösterin
+    # st.error(f"Bir veritabanı hatası oluştu. Ayrıntılar: {e}")
+    # ... hata durumunda yapılacak işlemler ...
                                             """
                                             INSERT INTO mesai_kayitlari 
                                             (personel_ad_soyad, tarih, birimi, mesai_baslangic, mola1_cikis, mola1_bitis, 
