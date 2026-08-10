@@ -284,81 +284,68 @@ personel_dict = {
 }
 
 active_personel_names = [p_name for p_name, data in personel_dict.items() if data["durum"] == "Aktif"]
-sorumlu_listesi = [p_name for p_name, data in personel_dict.items() if data["is_sorumlu"] == 1 and data["durum"] == "Aktif"]
 
-# SOL MENÜ (SIDEBAR) GİRİŞ
+# TEK MERKEZİ GİRİŞ PANELİ (SOL SIDEBAR)
 with st.sidebar:
-    st.header("🔑 Kullanıcı Giriş Paneli")
+    st.header("🔑 Giriş Paneli")
 
     if st.session_state["auth_role"] is None:
-        login_type = st.radio("Giriş Türünüzü Seçiniz:", ["Personel", "Birim Sorumlusu", "İşletme Müdürü"], key="login_type_radio")
-        st.divider()
+        # İsim Seçimi (Listede İşletme Müdürü de var)
+        tum_giris_secenekleri = ["İşletme Müdürü"] + active_personel_names
+        
+        secilen_kullanici = st.selectbox(
+            "Kullanıcı Adınızı Seçiniz:",
+            options=tum_giris_secenekleri,
+            index=None,
+            placeholder="Listeden adınızı seçin...",
+            key="merkezi_giris_select"
+        )
 
-        if login_type == "Personel":
-            st.subheader("👤 Personel Girişi")
-            secilen_p = st.selectbox(
-                "Adınızı Seçiniz:",
-                options=active_personel_names if active_personel_names else ["-"],
-                index=None,
-                placeholder="Listeden isminizi seçin...",
-                key="side_p_select"
-            )
+        p_birim_auto = "-"
+        if secilen_kullanici:
+            if secilen_kullanici == "İşletme Müdürü":
+                p_birim_auto = "Genel Yönetim"
+            elif secilen_kullanici in personel_dict:
+                p_birim_auto = personel_dict[secilen_kullanici]["birim"]
 
-            p_birim_auto = "-"
-            if secilen_p and secilen_p in personel_dict:
-                p_birim_auto = personel_dict[secilen_p]["birim"]
+        st.text_input("Bağlı Olduğunuz Birim", value=p_birim_auto, disabled=True, key="side_merkezi_birim")
+        pass_in = st.text_input("Şifreniz", type="password", key="side_merkezi_pass")
 
-            st.text_input("Bağlı Olduğunuz Birim", value=p_birim_auto, disabled=True, key="side_p_birim_disabled")
-            p_pass_in = st.text_input("Şifreniz (Varsayılan: 1111)", type="password", key="side_p_pass")
-
-            if st.button("Personel Girişi Yap", use_container_width=True):
-                if not secilen_p:
-                    st.error("Lütfen adınızı seçiniz!")
-                else:
-                    dogru_pass = personel_dict[secilen_p]["sifre"]
-                    if p_pass_in == dogru_pass:
-                        st.session_state["auth_role"] = "PERSONEL"
-                        st.session_state["auth_unit"] = p_birim_auto
-                        st.session_state["auth_user_name"] = secilen_p
-                        st.success(f"Hoş geldiniz, {secilen_p}")
-                        st.rerun()
-                    else:
-                        st.error("Hatalı Şifre!")
-
-        elif login_type == "Birim Sorumlusu":
-            st.subheader("👔 Birim Sorumlusu Girişi")
-            if not sorumlu_listesi:
-                st.info("Tanımlı Birim Sorumlusu bulunmamaktadır.")
+        if st.button("Giriş Yap", use_container_width=True):
+            if not secilen_kullanici:
+                st.error("Lütfen adınızı seçiniz!")
             else:
-                secilen_sorumlu = st.selectbox("İsminizi Seçiniz:", options=sorumlu_listesi, key="sorumlu_select")
-                sorumlu_pass_input = st.text_input("Giriş Şifreniz", type="password", key="sorumlu_pass")
-
-                if st.button("Birim Sorumlusu Olarak Giriş Yap", use_container_width=True):
-                    dogru_sifre = personel_dict[secilen_sorumlu]["sifre"]
-                    if sorumlu_pass_input == dogru_sifre:
-                        u_birim = personel_dict[secilen_sorumlu]["birim"]
-                        st.session_state["auth_role"] = "SORUMLU"
-                        st.session_state["auth_unit"] = u_birim
-                        st.session_state["auth_user_name"] = secilen_sorumlu
+                # 1. İŞLETME MÜDÜRÜ GİRİŞİ
+                if secilen_kullanici == "İşletme Müdürü":
+                    if pass_in == YONETICI_SIFRESI:
+                        st.session_state["auth_role"] = "MUDUR"
+                        st.session_state["auth_unit"] = "ALL"
+                        st.session_state["auth_user_name"] = "İşletme Müdürü"
                         st.session_state["sub_tab_index"] = 0
-                        st.success(f"Hoş geldiniz, {secilen_sorumlu}")
+                        st.success("Müdür Girişi Başarılı!")
+                        st.rerun()
+                    else:
+                        st.error("Hatalı Müdür Şifresi!")
+                
+                # 2. PERSONEL VEYA BİRİM SORUMLUSU GİRİŞİ
+                else:
+                    dogru_pass = personel_dict[secilen_kullanici]["sifre"]
+                    if pass_in == dogru_pass:
+                        is_sorumlu = personel_dict[secilen_kullanici]["is_sorumlu"] == 1
+                        
+                        # Rol Otomatik Belirlenir
+                        if is_sorumlu:
+                            st.session_state["auth_role"] = "SORUMLU"
+                        else:
+                            st.session_state["auth_role"] = "PERSONEL"
+
+                        st.session_state["auth_unit"] = p_birim_auto
+                        st.session_state["auth_user_name"] = secilen_kullanici
+                        st.session_state["sub_tab_index"] = 0
+                        st.success(f"Hoş geldiniz, {secilen_kullanici}")
                         st.rerun()
                     else:
                         st.error("Hatalı Şifre!")
-
-        else: # İşletme Müdürü
-            st.subheader("👑 İşletme Müdürü Girişi")
-            input_pass = st.text_input("Müdür Şifresi", type="password", key="mudur_pass")
-            if st.button("Müdür Olarak Giriş Yap", use_container_width=True):
-                if input_pass == YONETICI_SIFRESI:
-                    st.session_state["auth_role"] = "MUDUR"
-                    st.session_state["auth_unit"] = "ALL"
-                    st.session_state["auth_user_name"] = "İşletme Müdürü"
-                    st.session_state["sub_tab_index"] = 0
-                    st.success("Müdür Girişi Başarılı!")
-                    st.rerun()
-                else:
-                    st.error("Hatalı Şifre!")
     else:
         role_labels = {
             "PERSONEL": "Personel",
@@ -380,7 +367,7 @@ st.caption("Personel Mesai Takip ve Yönetim Sistemi")
 
 # GİRİŞ YAPILMADIYSA VEYA ROLÜNE GÖRE EKRANLARI YÜKLE
 if st.session_state["auth_role"] is None:
-    st.info("👈 **Lütfen sağ tarafı görüntülemek için sol taraftaki menüden Personel, Birim Sorumlusu veya Müdür girişi yapınız.**")
+    st.info("👈 **Lütfen sağ tarafı görüntülemek için sol taraftaki menüden kullanıcı adınız ve şifrenizle giriş yapınız.**")
 
 elif st.session_state["auth_role"] == "PERSONEL":
     st.success(f"👤 Hoş Geldiniz Sayın **{st.session_state['auth_user_name']}** ({st.session_state['auth_unit']})")
