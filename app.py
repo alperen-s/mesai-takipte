@@ -619,12 +619,97 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
         st.divider()
 
         if "⚙️ Personel ve Birim Yönetimi" in selected_sub_tab:
+            # TOPLU EXCEL YÜKLEME ALANI
+            with st.expander("📁 Excel / CSV ile Toplu Personel ve Birim Yükle", expanded=False):
+                st.write("Toplu personel eklemek için hazırladığınız Excel (`.xlsx`) veya CSV dosyasını aşağıdan yükleyebilirsiniz.")
+                st.caption("Not: Dosyadaki birim adı veritabanında yoksa otomatik olarak yeni birim olarak oluşturulacaktır.")
+
+                # Şablon İndirme Butonu
+                sample_df = pd.DataFrame([
+                    {"Ad Soyad": "Ahmet Yılmaz", "Birim Adı": "AFSÜ Cafe", "Birim Sorumlusu": "Evet", "Şifre": "1234"},
+                    {"Ad Soyad": "Mehmet Demir", "Birim Adı": "Sağlık Cafe", "Birim Sorumlusu": "Hayır", "Şifre": "1111"},
+                ])
+                sample_csv = sample_df.to_csv(index=False).encode("utf-8-sig")
+                st.download_button(
+                    label="📥 Örnek Yükleme Şablonunu İndir (CSV)",
+                    data=sample_csv,
+                    file_name="ornek_personel_sablonu.csv",
+                    mime="text/csv"
+                )
+
+                uploaded_file = st.file_uploader("Excel veya CSV Dosyası Seçin", type=["xlsx", "csv"])
+
+                if uploaded_file is not None:
+                    try:
+                        if uploaded_file.name.endswith(".csv"):
+                            df_upload = pd.read_csv(uploaded_file)
+                        else:
+                            df_upload = pd.read_excel(uploaded_file)
+
+                        st.write("📋 **Yüklenecek Veri Önizlemesi:**")
+                        st.dataframe(df_upload, use_container_width=True)
+
+                        if st.button("🚀 Verileri Veritabanına Aktar"):
+                            conn = sqlite3.connect("mesai_takip.db", timeout=10)
+                            c = conn.cursor()
+
+                            eklenen_p = 0
+                            eklenen_b = 0
+                            hata_mesajlari = []
+
+                            for _, row in df_upload.iterrows():
+                                p_ad = str(row.get("Ad Soyad", "")).strip()
+                                b_adi = str(row.get("Birim Adı", "")).strip()
+                                sorumlu_raw = str(row.get("Birim Sorumlusu", "Hayır")).strip().lower()
+                                p_sifre = str(row.get("Şifre", "1111")).strip()
+
+                                if not p_ad or p_ad == "nan" or not b_adi or b_adi == "nan":
+                                    continue
+
+                                is_sorumlu = 1 if sorumlu_raw in ["evet", "1", "true", "evet "] else 0
+
+                                # 1. Birim Yoksa Otomatik Ekle
+                                c.execute("SELECT id FROM birimler WHERE birim_adi = ?", (b_adi,))
+                                if not c.fetchone():
+                                    c.execute("INSERT INTO birimler (birim_adi, birim_renk) VALUES (?, '#007bff')", (b_adi,))
+                                    eklenen_b += 1
+
+                                # 2. Birim Sorumlusu Kontrolü
+                                if is_sorumlu == 1:
+                                    c.execute("SELECT ad_soyad FROM personeller WHERE birim_adi = ? AND is_birim_sorumlusu = 1 AND durum = 'Aktif'", (b_adi,))
+                                    mevcut_s = c.fetchone()
+                                    if mevcut_s and mevcut_s[0] != p_ad:
+                                        hata_mesajlari.append(f"⚠️ `{p_ad}` kişisi `{b_adi}` için sorumlu yapılamadı. Zaten aktif sorumlu: **{mevcut_s[0]}**")
+                                        is_sorumlu = 0
+
+                                # 3. Personeli Ekle
+                                try:
+                                    c.execute("""
+                                        INSERT INTO personeller (ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum)
+                                        VALUES (?, ?, ?, ?, 'Aktif')
+                                    """, (p_ad, b_adi, is_sorumlu, p_sifre if p_sifre != "nan" else "1111"))
+                                    eklenen_p += 1
+                                except sqlite3.IntegrityError:
+                                    hata_mesajlari.append(f"ℹ️ `{p_ad}` zaten veritabanında kayıtlı olduğu için atlandı.")
+
+                            conn.commit()
+                            conn.close()
+
+                            st.success(f"🎉 İşlem Tamamlandı! **{eklenen_p}** yeni personel, **{eklenen_b}** yeni birim başarıyla eklendi.")
+                            for h_msg in hata_mesajlari:
+                                st.warning(h_msg)
+
+                            st.rerun()
+
+                    except Exception as e:
+                        st.error(f"Dosya okunurken bir hata oluştu: {e}")
+
             col_admin1, col_admin2 = st.columns(2)
             birimler_tuples = get_birimler_data()
             birimler_list = [b[0] for b in birimler_tuples]
 
             with col_admin1:
-                st.subheader("👨‍💼 Personel Tanımlama ve Şifre Yönetimi")
+                st.subheader("👨‍💼 Tekli Personel Tanımlama")
                 yeni_p_ad = st.text_input("Yeni Personel Adı Soyadı")
                 yeni_p_birim = st.selectbox("Bağlı Olduğu Birim", options=birimler_list if birimler_list else ["-"])
                 yeni_p_sorumlu = st.checkbox("Bu Personel Birim Sorumlusudur")
@@ -635,7 +720,6 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                         conn = sqlite3.connect("mesai_takip.db", timeout=10)
                         c = conn.cursor()
                         
-                        # --- TEK BİRİM SORUMLUSU KONTROLÜ ---
                         if yeni_p_sorumlu:
                             c.execute("SELECT ad_soyad FROM personeller WHERE birim_adi = ? AND is_birim_sorumlusu = 1 AND durum = 'Aktif'", (yeni_p_birim,))
                             mevcut_sorumlu = c.fetchone()
