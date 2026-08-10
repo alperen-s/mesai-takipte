@@ -6,7 +6,6 @@ import pandas as pd
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 import streamlit as st
 
@@ -56,10 +55,12 @@ def hesapla_calisma_suresi(baslangic_str, bitis_str):
     except Exception:
         return 0.0, "-"
 
+# HATA VERMEYEN GÜVENLİ VERİTABANI BAŞLATMA
 def init_db():
-    conn = sqlite3.connect("mesai_takip.db")
+    conn = sqlite3.connect("mesai_takip.db", timeout=10)
     c = conn.cursor()
 
+    # 1. TABLOLARI OLUŞTUR
     c.execute("""
         CREATE TABLE IF NOT EXISTS mesai_kayitlari (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,17 +125,21 @@ def init_db():
         )
     """)
 
-    c.execute("PRAGMA table_info(personeller)")
-    cols_p = [col[1] for col in c.fetchall()]
-    if "durum" not in cols_p:
+    # 2. SÜTUN KONTROLLERİ (TRY-EXCEPT İLE SESSİZCE GEÇ)
+    try:
         c.execute("ALTER TABLE personeller ADD COLUMN durum TEXT DEFAULT 'Aktif'")
+    except Exception:
+        pass
 
-    c.execute("PRAGMA table_info(birimler)")
-    cols_b = [col[1] for col in c.fetchall()]
-    if "birim_renk" not in cols_b:
+    try:
         c.execute("ALTER TABLE birimler ADD COLUMN birim_renk TEXT DEFAULT '#007bff'")
+    except Exception:
+        pass
 
-    c.execute("UPDATE personeller SET sifre = '1111' WHERE sifre IS NULL OR sifre = ''")
+    try:
+        c.execute("UPDATE personeller SET sifre = '1111' WHERE sifre IS NULL OR sifre = ''")
+    except Exception:
+        pass
 
     conn.commit()
     conn.close()
@@ -142,7 +147,7 @@ def init_db():
 init_db()
 
 def get_personeller_data(only_active=False):
-    conn = sqlite3.connect("mesai_takip.db")
+    conn = sqlite3.connect("mesai_takip.db", timeout=10)
     c = conn.cursor()
     if only_active:
         c.execute("SELECT ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum FROM personeller WHERE durum = 'Aktif' ORDER BY ad_soyad ASC")
@@ -153,7 +158,7 @@ def get_personeller_data(only_active=False):
     return rows
 
 def get_birimler_data():
-    conn = sqlite3.connect("mesai_takip.db")
+    conn = sqlite3.connect("mesai_takip.db", timeout=10)
     c = conn.cursor()
     c.execute("SELECT birim_adi, birim_renk FROM birimler ORDER BY birim_adi ASC")
     rows = c.fetchall()
@@ -376,7 +381,7 @@ with st.sidebar:
 st.title("🏛️ AFSÜ İktisadi İşletme Müdürlüğü")
 st.caption("Personel Mesai Takip ve Yönetim Sistemi")
 
-# GİRİŞ YAPILMADAYSA VEYA ROLÜNE GÖRE EKRANLARI YÜKLE
+# GİRİŞ YAPILMADIYSA VEYA ROLÜNE GÖRE EKRANLARI YÜKLE
 if st.session_state["auth_role"] is None:
     st.info("👈 **Lütfen sağ tarafı görüntülemek için sol taraftaki menüden Personel, Birim Sorumlusu veya Müdür girişi yapınız.**")
 
@@ -413,7 +418,7 @@ elif st.session_state["auth_role"] == "PERSONEL":
             elif p_yeni_pass != p_yeni_pass2:
                 st.error("Yeni şifreler birbiriyle uyuşmuyor!")
             else:
-                conn = sqlite3.connect("mesai_takip.db")
+                conn = sqlite3.connect("mesai_takip.db", timeout=10)
                 c = conn.cursor()
                 c.execute("UPDATE personeller SET sifre = ? WHERE ad_soyad = ?", (p_yeni_pass.strip(), p_ad_active))
                 conn.commit()
@@ -460,7 +465,7 @@ elif st.session_state["auth_role"] == "PERSONEL":
                 elif sure_saat > 9.0 and fazla_mesai == "Yapmadım":
                     st.error(f"🚨 **ÇALIŞMA SÜRESİ UYARISI:** Hesaplanan çalışma süreniz **{sure_saat} saat** ({sure_metin}). Lütfen Fazla Mesai alanını 'Yaptım' seçiniz!")
                 else:
-                    conn = sqlite3.connect("mesai_takip.db")
+                    conn = sqlite3.connect("mesai_takip.db", timeout=10)
                     c = conn.cursor()
 
                     is_sorumlu_personel = personel_dict.get(p_ad_active, {}).get("is_sorumlu", 0) == 1
@@ -532,7 +537,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
 
     with tab2:
         st.header("Mesai Takip Çizelgesi ve Raporlar")
-        conn = sqlite3.connect("mesai_takip.db")
+        conn = sqlite3.connect("mesai_takip.db", timeout=10)
         df = pd.read_sql_query("SELECT * FROM mesai_kayitlari ORDER BY tarih DESC", conn)
         conn.close()
 
@@ -604,7 +609,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
         current_user = st.session_state["auth_user_name"]
         birim_renk_map = get_birim_renk_map()
 
-        conn = sqlite3.connect("mesai_takip.db")
+        conn = sqlite3.connect("mesai_takip.db", timeout=10)
         c = conn.cursor()
 
         if current_role == "MUDUR":
@@ -657,7 +662,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                     if yeni_p_ad.strip() and yeni_p_birim != "-":
                         try:
                             sifre_val = yeni_p_sifre.strip() if yeni_p_sifre.strip() else "1111"
-                            conn = sqlite3.connect("mesai_takip.db")
+                            conn = sqlite3.connect("mesai_takip.db", timeout=10)
                             c = conn.cursor()
                             c.execute("INSERT INTO personeller (ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum) VALUES (?, ?, ?, ?, 'Aktif')",
                                       (yeni_p_ad.strip(), yeni_p_birim, 1 if yeni_p_sorumlu else 0, sifre_val))
@@ -691,7 +696,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                             st.write("<br/>", unsafe_allow_html=True)
                             if st.button("Şifre Güncelle", key=f"btn_pass_{p_name}"):
                                 if guncel_sifre.strip():
-                                    conn = sqlite3.connect("mesai_takip.db")
+                                    conn = sqlite3.connect("mesai_takip.db", timeout=10)
                                     c = conn.cursor()
                                     c.execute("UPDATE personeller SET sifre = ? WHERE ad_soyad = ?", (guncel_sifre.strip(), p_name))
                                     conn.commit()
@@ -704,7 +709,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                             yeni_durum_hedef = "Pasif" if p_durum == "Aktif" else "Aktif"
                             btn_text = "🔴 Personeli Pasife Al" if p_durum == "Aktif" else "🟢 Personeli Tekrar Aktif Yap"
                             if st.button(btn_text, key=f"toggle_p_{p_name}"):
-                                conn = sqlite3.connect("mesai_takip.db")
+                                conn = sqlite3.connect("mesai_takip.db", timeout=10)
                                 c = conn.cursor()
                                 c.execute("UPDATE personeller SET durum = ? WHERE ad_soyad = ?", (yeni_durum_hedef, p_name))
                                 conn.commit()
@@ -713,7 +718,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
 
                         with col_act2:
                             if st.button("🗑️ Kalıcı Olarak Sil", key=f"del_p_{p_name}"):
-                                conn = sqlite3.connect("mesai_takip.db")
+                                conn = sqlite3.connect("mesai_takip.db", timeout=10)
                                 c = conn.cursor()
                                 c.execute("DELETE FROM personeller WHERE ad_soyad = ?", (p_name,))
                                 conn.commit()
@@ -729,7 +734,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                 if st.button("Birim Ekle"):
                     if yeni_birim.strip():
                         try:
-                            conn = sqlite3.connect("mesai_takip.db")
+                            conn = sqlite3.connect("mesai_takip.db", timeout=10)
                             c = conn.cursor()
                             c.execute("INSERT INTO birimler (birim_adi, birim_renk) VALUES (?, ?)", (yeni_birim.strip(), yeni_birim_renk))
                             conn.commit()
@@ -747,7 +752,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                     c_b1, c_b2 = st.columns([3, 1])
                     c_b1.markdown(f"<span style='color:{b_renk}; font-size:18px;'>██</span> <b>{b_adi}</b>", unsafe_allow_html=True)
                     if c_b2.button("Sil", key=f"del_b_{b_adi}"):
-                        conn = sqlite3.connect("mesai_takip.db")
+                        conn = sqlite3.connect("mesai_takip.db", timeout=10)
                         c = conn.cursor()
                         c.execute("DELETE FROM birimler WHERE birim_adi = ?", (b_adi,))
                         conn.commit()
@@ -756,7 +761,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
 
         elif "Mesai Onayları" in selected_sub_tab:
             st.subheader("Mesai Onay ve Yönetim İşlemleri")
-            conn = sqlite3.connect("mesai_takip.db")
+            conn = sqlite3.connect("mesai_takip.db", timeout=10)
             if current_role == "MUDUR":
                 query = """
                     SELECT *, (CASE WHEN birim_sorumlusu_onay = 0 OR isletme_muduru_onay = 0 THEN 0 ELSE 1 END) as onay_durum_sira
@@ -800,7 +805,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                             if is_own_record:
                                 st.caption("ℹ️ *Birim sorumlusu kendi kaydını onaylayamaz.*")
                             elif row["birim_sorumlusu_onay"] == 0 and st.button("Birim Sorumlusu Olarak Onayla", key=f"bs_{row['id']}_{idx}"):
-                                conn = sqlite3.connect("mesai_takip.db")
+                                conn = sqlite3.connect("mesai_takip.db", timeout=10)
                                 c = conn.cursor()
                                 c.execute("UPDATE mesai_kayitlari SET birim_sorumlusu_onay = 1 WHERE id = ?", (row["id"],))
                                 conn.commit()
@@ -813,7 +818,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                             if current_role == "MUDUR":
                                 if row["isletme_muduru_onay"] == 0:
                                     if st.button("İşletme Müdürü Olarak Onayla", key=f"im_{row['id']}_{idx}"):
-                                        conn = sqlite3.connect("mesai_takip.db")
+                                        conn = sqlite3.connect("mesai_takip.db", timeout=10)
                                         c = conn.cursor()
                                         c.execute("UPDATE mesai_kayitlari SET isletme_muduru_onay = 1 WHERE id = ?", (row["id"],))
                                         conn.commit()
@@ -821,7 +826,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                                         st.rerun()
                                 else:
                                     if st.button("↩️ Müdür Onayını İptal Et", key=f"im_cancel_{row['id']}_{idx}"):
-                                        conn = sqlite3.connect("mesai_takip.db")
+                                        conn = sqlite3.connect("mesai_takip.db", timeout=10)
                                         c = conn.cursor()
                                         c.execute("UPDATE mesai_kayitlari SET isletme_muduru_onay = 0 WHERE id = ?", (row["id"],))
                                         conn.commit()
@@ -831,7 +836,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                         with col_o3:
                             if current_role == "MUDUR":
                                 if st.button("🗑️ Kaydı Tamamen Sil", key=f"del_m_rec_{row['id']}_{idx}"):
-                                    conn = sqlite3.connect("mesai_takip.db")
+                                    conn = sqlite3.connect("mesai_takip.db", timeout=10)
                                     c = conn.cursor()
                                     c.execute("DELETE FROM mesai_kayitlari WHERE id = ?", (row["id"],))
                                     conn.commit()
@@ -846,7 +851,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
             if bekleyen_duzeltme_sayisi > 0:
                 st.error(f"🔔 **{bekleyen_duzeltme_sayisi} adet** bekleyen düzeltme / güncelleme talebi var!")
 
-            conn = sqlite3.connect("mesai_takip.db")
+            conn = sqlite3.connect("mesai_takip.db", timeout=10)
             c = conn.cursor()
             if current_role == "MUDUR":
                 c.execute("SELECT * FROM duzeltme_talepleri WHERE durum = 'Bekliyor' ORDER BY id DESC")
@@ -877,7 +882,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                                 st.caption("ℹ️ *Birim sorumluları kendi düzeltme taleplerini onaylayamazlar.*")
                             else:
                                 if st.button("✅ Onayla ve Mesai Çizelgesine İşle", key=f"app_d_{t_id}_{idx_t}"):
-                                    conn = sqlite3.connect("mesai_takip.db")
+                                    conn = sqlite3.connect("mesai_takip.db", timeout=10)
                                     c = conn.cursor()
                                     p_is_sorumlu = personel_dict.get(p_ad, {}).get("is_sorumlu", 0) == 1
                                     req_bs_onay = 1 if p_is_sorumlu else 0
@@ -908,7 +913,7 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                         with col_dt2:
                             if not is_own_request:
                                 if st.button("🗑️ Talebi Reddet ve Kalıcı Olarak Sil", key=f"del_req_{t_id}_{idx_t}"):
-                                    conn = sqlite3.connect("mesai_takip.db")
+                                    conn = sqlite3.connect("mesai_takip.db", timeout=10)
                                     c = conn.cursor()
                                     c.execute("DELETE FROM duzeltme_talepleri WHERE id = ?", (t_id,))
                                     conn.commit()
