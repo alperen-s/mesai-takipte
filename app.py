@@ -624,17 +624,21 @@ else:  # SORUMLU VE MÜDÜR YETKİLİ EKRANLARI
                 st.write("Toplu personel eklemek için hazırladığınız Excel (`.xlsx`) veya CSV dosyasını aşağıdan yükleyebilirsiniz.")
                 st.caption("Not: Dosyadaki birim adı veritabanında yoksa otomatik olarak yeni birim olarak oluşturulacaktır.")
 
-                # Şablon İndirme Butonu
+                # Şablon İndirme Butonu (Gerçek XLSX dosyası üretir)
                 sample_df = pd.DataFrame([
                     {"Ad Soyad": "Ahmet Yılmaz", "Birim Adı": "AFSÜ Cafe", "Birim Sorumlusu": "Evet", "Şifre": "1234"},
                     {"Ad Soyad": "Mehmet Demir", "Birim Adı": "Sağlık Cafe", "Birim Sorumlusu": "Hayır", "Şifre": "1111"},
                 ])
-                sample_csv = sample_df.to_csv(index=False).encode("utf-8-sig")
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+                    sample_df.to_excel(writer, index=False, sheet_name="Personeller")
+                excel_buffer.seek(0)
+
                 st.download_button(
-                    label="📥 Örnek Yükleme Şablonunu İndir (CSV)",
-                    data=sample_csv,
-                    file_name="ornek_personel_sablonu.csv",
-                    mime="text/csv"
+                    label="📥 Örnek Yükleme Şablonunu İndir (.xlsx)",
+                    data=excel_buffer,
+                    file_name="ornek_personel_sablonu.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
                 uploaded_file = st.file_uploader("Excel veya CSV Dosyası Seçin", type=["xlsx", "csv"])
