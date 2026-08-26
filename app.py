@@ -1,8 +1,8 @@
 import streamlit as st
+import streamlit.components.v1 as components
 
-# 1. LOGO ADRESİ
-# İstediğin logonun doğrudan internet bağlantısını (URL) buraya yazabilirsin
-LOGO_URL = "https://isletme.afsu.edu.tr/wp-content/uploads/sites/69/2026/08/logo-4.png"
+# Doğrudan erişilebilir tam URL (Görselin .png uzantılı olmasına dikkat edin)
+LOGO_URL = "https://isletme.afsu.edu.tr/wp-content/uploads/logo.png"
 
 st.set_page_config(
     page_title="AFSÜ Personel Takip",
@@ -11,15 +11,24 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. PWA Meta Etiketleri (HTML Enjeksiyonu)
-st.markdown(
-    '<link rel="apple-touch-icon" sizes="180x180" href="' + LOGO_URL + '">'
-    '<link rel="icon" type="image/png" href="' + LOGO_URL + '">'
-    '<link rel="shortcut icon" href="' + LOGO_URL + '">',
-    unsafe_allow_html=True
-)
+# Safari ve iOS Ana Ekran İçin HTML Enjeksiyonu
+pwa_html = f"""
+    <script>
+        // iOS Safari için Apple Touch Icon enjeksiyonu
+        var link = document.createElement('link');
+        link.rel = 'apple-touch-icon';
+        link.href = '{LOGO_URL}';
+        document.getElementsByTagName('head')[0].appendChild(link);
+        
+        var linkFavicon = document.createElement('link');
+        linkFavicon.rel = 'icon';
+        linkFavicon.href = '{LOGO_URL}';
+        document.getElementsByTagName('head')[0].appendChild(linkFavicon);
+    </script>
+"""
+components.html(pwa_html, height=0, width=0)
 
-# 3. Mobil Stiller ve Arayüz CSS (f-string kaldırıldı, parantez hatası vermez)
+# Arayüz Stilleri
 st.markdown("""
     <style>
         footer { visibility: hidden; }
@@ -52,14 +61,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 4. YAN MENÜ İÇERİĞİ
 with st.sidebar:
     st.image(LOGO_URL, width=140)
     st.header("📋 Menü")
     st.write("Hoş geldiniz!")
     st.markdown("---")
 
-# 5. ANA SAYFA İÇERİĞİ
 st.title("🏛️ AFSÜ İktisadi İşletme Müdürlüğü")
 st.caption("Personel Mesai Takip ve Yönetim Sistemi")
 
