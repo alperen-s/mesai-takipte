@@ -2,7 +2,7 @@ import streamlit as st
 
 # 1. LOGO ADRESİ
 # İstediğin logonun doğrudan internet bağlantısını (URL) buraya yazabilirsin
-LOGO_URL = "https://isletme.afsu.edu.tr/wp-content/uploads/logo.png"
+LOGO_URL = "https://isletme.afsu.edu.tr/wp-content/uploads/sites/69/2026/08/logo-4.png"
 
 st.set_page_config(
     page_title="AFSÜ Personel Takip",
