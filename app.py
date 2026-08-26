@@ -1,4 +1,42 @@
 import streamlit as st
+
+st.set_page_config(
+    page_title="AFSÜ Personel Takip",
+    page_icon="📋",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
+
+# Temiz CSS Enjeksiyonu (iframe veya JS olmadan)
+st.markdown("""
+    <style>
+        /* Streamlit varsayılan üst/alt boşlukları ve menüleri gizle */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        
+        /* Mobil görünüm için üst boşluğu sıfırla */
+        .block-container {
+            padding-top: 1.5rem !important;
+            padding-bottom: 2rem !important;
+        }
+        
+        /* Butonları mobilde daha kullanışlı yap */
+        .stButton > button {
+            width: 100% !important;
+            height: 3.2rem !important;
+            font-size: 1.1rem !important;
+            border-radius: 10px !important;
+        }
+        
+        /* Form alanını düzenle */
+        div[data-testid="stForm"] {
+            border-radius: 12px;
+            padding: 1.2rem;
+        }
+    </style>
+""", unsafe_allow_html=True)
+import streamlit as st
 import streamlit.components.v1 as components
 
 st.set_page_config(
