@@ -45,7 +45,51 @@ st.set_page_config(
     page_icon="📋",
     layout="wide",
 )
+import streamlit as st
 
+st.set_page_config(
+    page_title="AFSÜ Personel Takip",
+    page_icon="📋",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
+
+# PWA Yapılandırması ve Mobil UI İyileştirmeleri
+st.markdown("""
+    <head>
+        <!-- Mobil Ekran Görünümü -->
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="AFSÜ Mesai">
+        <meta name="theme-color" content="#193762">
+        
+        <!-- Uygulama İkonları (Kurumsal renklerinize uygun link verebilirsiniz) -->
+        <link rel="apple-touch-icon" href="https://isletme.afsu.edu.tr/favicon.ico">
+    </head>
+    
+    <style>
+        /* Mobil Dokunmatik Alanları Genişletme ve Gizleme */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        
+        /* Butonları mobil dostu tam genişlik yapma */
+        .stButton > button {
+            width: 100% !important;
+            height: 3.2rem !important;
+            font-size: 1.1rem !important;
+            border-radius: 10px !important;
+        }
+        
+        /* Form alanlarını ve kartları yuvarlama */
+        div[data-testid="stForm"] {
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+    </style>
+""", unsafe_allow_html=True)
 def hesapla_calisma_suresi(baslangic_str, bitis_str):
     try:
         if not baslangic_str or not bitis_str:
