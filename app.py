@@ -2,7 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # Doğrudan erişilebilir tam URL (Görselin .png uzantılı olmasına dikkat edin)
-LOGO_URL = "https://isletme.afsu.edu.tr/wp-content/uploads/logo.png"
+LOGO_URL = "https://isletme.afsu.edu.tr/wp-content/uploads/sites/69/2026/08/logo-4.png"
 
 st.set_page_config(
     page_title="AFSÜ Personel Takip",
