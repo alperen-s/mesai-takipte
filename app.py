@@ -1,20 +1,21 @@
 import streamlit as st
 
-# 1. Tarayıcı Sekme İkonu
+# 1. Logonun Web URL'si (İnternetten doğrudan erişilebilir tam adres)
+# Buraya kurum logosunun doğrudan bağlantısını yerleştirin
+LOGO_URL = "https://isletme.afsu.edu.tr/wp-content/uploads/logo.png"
+
 st.set_page_config(
     page_title="AFSÜ Personel Takip",
-    page_icon="logo.png",  # Proje klasöründeki logonun adı
+    page_icon=LOGO_URL,  # Local dosya adı yerine doğrudan URL verdik
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 2. Mobil Ana Ekran ve Uygulama İkonu URL'si
-LOGO_URL = "https://isletme.afsu.edu.tr/favicon.ico"  # Kendi logonun web bağlantısını yazabilirsin
-
-# CSS içerisindeki parantezler f-string için çift {{ }} yapıldı
+# 2. iOS Safari ve Android için Özel PWA İkon Tanımlamaları
 st.markdown(f"""
     <head>
-        <link rel="apple-touch-icon" href="{LOGO_URL}">
+        <link rel="apple-touch-icon" sizes="180x180" href="{LOGO_URL}">
+        <link rel="icon" type="image/png" href="{LOGO_URL}">
         <link rel="shortcut icon" href="{LOGO_URL}">
     </head>
     <style>
@@ -37,7 +38,7 @@ st.markdown(f"""
         .main .block-container {{
             padding-top: 3.5rem !important;
             padding-bottom: 2rem !important;
-        }}
+        }
         
         .stButton > button {{
             width: 100% !important;
@@ -50,6 +51,7 @@ st.markdown(f"""
 
 # 3. YAN MENÜ İÇERİĞİ
 with st.sidebar:
+    st.image(LOGO_URL, width=140)
     st.header("📋 Menü")
     st.write("Hoş geldiniz!")
     st.markdown("---")
