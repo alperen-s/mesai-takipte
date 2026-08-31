@@ -16,16 +16,68 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. GÖRSELDEKİ MODERN MOBİL TEMA VE CSS YAPI
+# 2. VERİTABANI İLKLEME (Sorgulardan ÖNCE Çalışmalı)
+def init_db():
+    conn = sqlite3.connect("mesai_takip.db", timeout=10)
+    c = conn.cursor()
+    
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS mesai_kayitlari (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, personel_ad_soyad TEXT, tarih TEXT, birimi TEXT,
+            mesai_baslangic TEXT, mola1_cikis TEXT, mola1_bitis TEXT, ogle_baslangic TEXT, ogle_bitis TEXT,
+            mola2_cikis TEXT, mola2_bitis TEXT, mesai_bitis TEXT, fazla_mesai TEXT, calisma_suresi_saat REAL DEFAULT 0.0,
+            calisma_suresi_metin TEXT DEFAULT '', birim_sorumlusu_onay INTEGER DEFAULT 0, isletme_muduru_onay INTEGER DEFAULT 0,
+            UNIQUE(personel_ad_soyad, tarih)
+        )
+    """)
+    
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS personeller (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, ad_soyad TEXT UNIQUE, birim_adi TEXT DEFAULT '',
+            is_birim_sorumlusu INTEGER DEFAULT 0, sifre TEXT DEFAULT '1111', durum TEXT DEFAULT 'Aktif'
+        )
+    """)
+    
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS duzeltme_talepleri (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, mesai_id INTEGER, personel_ad_soyad TEXT, tarih TEXT, birimi TEXT,
+            mesai_baslangic TEXT, mola1_cikis TEXT, mola1_bitis TEXT, ogle_baslangic TEXT, ogle_bitis TEXT,
+            mola2_cikis TEXT, mola2_bitis TEXT, mesai_bitis TEXT, fazla_mesai TEXT, calisma_suresi_saat REAL DEFAULT 0.0,
+            calisma_suresi_metin TEXT DEFAULT '', durum TEXT DEFAULT 'Bekliyor'
+        )
+    """)
+    
+    # Eski tablolarda 'durum' sütunu yoksa ekleme kontrolü
+    try:
+        c.execute("ALTER TABLE personeller ADD COLUMN durum TEXT DEFAULT 'Aktif'")
+    except Exception:
+        pass
+        
+    conn.commit()
+    conn.close()
+
+# Veritabanı tablolarını kesin olarak oluşturuyoruz
+init_db()
+
+# 3. VERİ ÇEKME FONKSİYONU
+def get_personeller_data():
+    conn = sqlite3.connect("mesai_takip.db", timeout=10)
+    c = conn.cursor()
+    try:
+        c.execute("SELECT ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum FROM personeller ORDER BY ad_soyad ASC")
+        rows = c.fetchall()
+    except Exception:
+        rows = []
+    conn.close()
+    return rows
+
+# 4. GÖRSEL TEMA VE CSS
 st.markdown("""
     <style>
-        /* Genel Arka Plan ve Tipografi */
         .stApp {
             background-color: #f6f8fa !important;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
-        
-        /* Header / Footer / Varsayılan Öğeleri Gizle */
         footer { visibility: hidden; }
         #MainMenu { visibility: hidden; }
         header[data-testid="stHeader"] {
@@ -35,11 +87,9 @@ st.markdown("""
         .main .block-container {
             padding-top: 1.5rem !important;
             padding-bottom: 5rem !important;
-            max-width: 500px !important; /* Mobil Ekran Genişliği Limiti */
+            max-width: 500px !important;
             margin: 0 auto;
         }
-
-        /* 🟢 CANLI MESAİ KARTI (Lacivert Card) */
         .live-card {
             background: linear-gradient(135deg, #0f3458 0%, #164370 100%);
             border-radius: 24px;
@@ -58,32 +108,10 @@ st.markdown("""
             font-weight: 600;
             display: inline-block;
         }
-        .live-time-title {
-            color: #a0b2c6;
-            font-size: 13px;
-            margin-top: 18px;
-            margin-bottom: 2px;
-        }
-        .live-time-clock {
-            font-size: 42px;
-            font-weight: 800;
-            letter-spacing: -1px;
-            line-height: 1;
-            margin-bottom: 12px;
-        }
-        .live-elapsed {
-            position: absolute;
-            right: 24px;
-            top: 65px;
-            text-align: right;
-        }
-        .live-elapsed-val {
-            font-size: 18px;
-            font-weight: 700;
-            color: #ffffff;
-        }
-
-        /* BEYAZ KART YAPISI (Plan & Özet Kartları) */
+        .live-time-title { color: #a0b2c6; font-size: 13px; margin-top: 18px; margin-bottom: 2px; }
+        .live-time-clock { font-size: 42px; font-weight: 800; letter-spacing: -1px; line-height: 1; margin-bottom: 12px; }
+        .live-elapsed { position: absolute; right: 24px; top: 65px; text-align: right; }
+        .live-elapsed-val { font-size: 18px; font-weight: 700; color: #ffffff; }
         .white-card {
             background: #ffffff;
             border-radius: 20px;
@@ -92,12 +120,7 @@ st.markdown("""
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
             border: 1px solid #eaeaea;
         }
-        .card-title {
-            font-size: 18px;
-            font-weight: 700;
-            color: #1a1a1a;
-            margin-bottom: 12px;
-        }
+        .card-title { font-size: 18px; font-weight: 700; color: #1a1a1a; margin-bottom: 12px; }
         .plan-item {
             display: flex;
             align-items: center;
@@ -106,8 +129,6 @@ st.markdown("""
             border-bottom: 1px solid #f0f0f0;
         }
         .plan-item:last-child { border-bottom: none; }
-
-        /* MOBİL TURUNCU BUTON */
         .stButton > button {
             background-color: #e85d35 !important;
             color: white !important;
@@ -117,110 +138,24 @@ st.markdown("""
             font-size: 16px !important;
             font-weight: 700 !important;
             box-shadow: 0 6px 15px rgba(232, 93, 53, 0.25) !important;
-            transition: all 0.2s ease;
         }
-        .stButton > button:hover {
-            background-color: #d44c26 !important;
-            transform: translateY(-1px);
-        }
-
-        /* METRİK VE STAT KARTLARI (Raporlar Sayfası) */
-        .stat-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 15px;
-        }
-        .stat-box {
-            background: #ffffff;
-            border-radius: 18px;
-            padding: 16px;
-            border: 1px solid #eaeaea;
-        }
-        .stat-number {
-            font-size: 28px;
-            font-weight: 800;
-            color: #0f3458;
-        }
-        .stat-label {
-            font-size: 12px;
-            color: #7a8b9e;
-            font-weight: 600;
-        }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px; }
+        .stat-box { background: #ffffff; border-radius: 18px; padding: 16px; border: 1px solid #eaeaea; }
+        .stat-number { font-size: 28px; font-weight: 800; color: #0f3458; }
+        .stat-label { font-size: 12px; color: #7a8b9e; font-weight: 600; }
     </style>
 """, unsafe_allow_html=True)
-
-# ----------------- VERİTABANI VE YARDIMCI MANTIKLAR -----------------
-def tr_to_pdf_text(text):
-    if not isinstance(text, str): return text
-    subst = {"ı": "i", "İ": "I", "ğ": "g", "Ğ": "G", "Ş": "S", "ş": "s", "Ç": "C", "ç": "c", "Ö": "O", "ö": "o", "Ü": "U", "ü": "u"}
-    for search, replace in subst.items(): text = text.replace(search, replace)
-    return text
-
-def hesapla_calisma_suresi(baslangic_str, bitis_str):
-    try:
-        if not baslangic_str or not bitis_str: return 0.0, "-"
-        fmt = "%H:%M"
-        t_bas = datetime.strptime(str(baslangic_str).strip(), fmt)
-        t_bit = datetime.strptime(str(bitis_str).strip(), fmt)
-        fark = t_bit - t_bas
-        toplam_dakika = int(fark.total_seconds() / 60)
-        if toplam_dakika < 0: return 0.0, "Geçersiz"
-        saat = toplam_dakika // 60
-        dakika = toplam_dakika % 60
-        return round(toplam_dakika / 60, 2), f"{saat}s {dakika}dk" if dakika > 0 else f"{saat}s"
-    except Exception: return 0.0, "-"
-
-def init_db():
-    conn = sqlite3.connect("mesai_takip.db", timeout=10)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS mesai_kayitlari (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, personel_ad_soyad TEXT, tarih TEXT, birimi TEXT,
-            mesai_baslangic TEXT, mola1_cikis TEXT, mola1_bitis TEXT, ogle_baslangic TEXT, ogle_bitis TEXT,
-            mola2_cikis TEXT, mola2_bitis TEXT, mesai_bitis TEXT, fazla_mesai TEXT, calisma_suresi_saat REAL DEFAULT 0.0,
-            calisma_suresi_metin TEXT DEFAULT '', birim_sorumlusu_onay INTEGER DEFAULT 0, isletme_muduru_onay INTEGER DEFAULT 0,
-            UNIQUE(personel_ad_soyad, tarih)
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS personeller (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, ad_soyad TEXT UNIQUE, birim_adi TEXT DEFAULT '',
-            is_birim_sorumlusu INTEGER DEFAULT 0, sifre TEXT DEFAULT '1111', durum TEXT DEFAULT 'Aktif'
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS duzeltme_talepleri (
-            id INTEGER PRIMARY KEY AUTOINCREMENT, mesai_id INTEGER, personel_ad_soyad TEXT, tarih TEXT, birimi TEXT,
-            mesai_baslangic TEXT, mola1_cikis TEXT, mola1_bitis TEXT, ogle_baslangic TEXT, ogle_bitis TEXT,
-            mola2_cikis TEXT, mola2_bitis TEXT, mesai_bitis TEXT, fazla_mesai TEXT, calisma_suresi_saat REAL DEFAULT 0.0,
-            calisma_suresi_metin TEXT DEFAULT '', durum TEXT DEFAULT 'Bekliyor'
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
-
-def get_personeller_data():
-    conn = sqlite3.connect("mesai_takip.db", timeout=10)
-    c = conn.cursor()
-    c.execute("SELECT ad_soyad, birim_adi, is_birim_sorumlusu, sifre, durum FROM personeller ORDER BY ad_soyad ASC")
-    rows = c.fetchall()
-    conn.close()
-    return rows
 
 # SESSION STATE İLKLEME
 if "auth_role" not in st.session_state: st.session_state["auth_role"] = None
 if "auth_unit" not in st.session_state: st.session_state["auth_unit"] = None
 if "auth_user_name" not in st.session_state: st.session_state["auth_user_name"] = ""
-if "current_nav" not in st.session_state: st.session_state["current_nav"] = "Ana Sayfa"
 
 personel_raw = get_personeller_data()
-personel_dict = {row[0]: {"birim": row[1], "is_sorumlu": row[2], "sifre": row[3], "durum": row[4]} for row in personel_raw}
-active_personel_names = [p for p, d in personel_dict.items() if d["durum"] == "Aktif"]
+personel_dict = {row[0]: {"birim": row[1], "is_sorumlu": row[2], "sifre": row[3], "durum": row[4]} for row in personel_raw} if personel_raw else {}
+active_personel_names = [p for p, d in personel_dict.items() if d.get("durum") == "Aktif"]
 
-# ----------------- ÜST BAŞLIK / HEADER -----------------
+# ÜST BAŞLIK
 bugun_str = datetime.now().strftime("%d %B %Y %A")
 
 col_head1, col_head2 = st.columns([4, 1])
@@ -238,7 +173,7 @@ with col_head2:
 
 st.write("")
 
-# ----------------- OTURUM AÇIK DEĞİLSE GİRİŞ EKRANI -----------------
+# GİRİŞ VEYA UYGULAMA EKRANI
 if st.session_state["auth_role"] is None:
     st.markdown("""
         <div class="white-card">
@@ -266,13 +201,9 @@ if st.session_state["auth_role"] is None:
             st.error("Hatalı Şifre veya Kullanıcı Seçimi!")
 
 else:
-    # ----------------- AFSÜ MOBİL SEKMELERİ -----------------
-    # GÖRSELDEKİ ALT GEZİNME BARININ YERİNİ TUTAN MODÜLER TABLAR
     tab_ana, tab_izin, tab_rapor = st.tabs(["🏠 Ana Sayfa", "📅 İzinler", "📊 Raporlar"])
 
-    # 1. TAB: ANA SAYFA (CANLI DOKU & BEYAZ KARTLAR)
     with tab_ana:
-        # Görseldeki Lacivert Canlı Mesai Kartı
         st.markdown("""
             <div class="live-card">
                 <span class="live-status-badge">🟢 Mesain Başladı</span>
@@ -291,7 +222,6 @@ else:
 
         st.markdown("<br/>", unsafe_allow_html=True)
 
-        # Görseldeki "Bugünün Planı" Kartı
         st.markdown("""
             <div class="white-card">
                 <div class="card-title">Bugünün Planı</div>
@@ -312,7 +242,6 @@ else:
             </div>
         """, unsafe_allow_html=True)
 
-    # 2. TAB: İZİNLER
     with tab_izin:
         st.markdown("""
             <div class="live-card" style="background: linear-gradient(135deg, #0f3458 0%, #1c5288 100%);">
@@ -332,11 +261,9 @@ else:
             if st.form_submit_button("Talebi Yöneticime İlet"):
                 st.success("İzin talebiniz oluşturuldu ve onay sistemine iletildi.")
 
-    # 3. TAB: RAPORLAR VE OPERASYON
     with tab_rapor:
         st.markdown("<h3 style='color:#0f3458;'>Operasyon Görünümü</h3>", unsafe_allow_html=True)
         
-        # Görseldeki 4'lü Stat Grid Yapısı
         st.markdown("""
             <div class="stat-grid">
                 <div class="stat-box">
@@ -362,9 +289,11 @@ else:
             </div>
         """, unsafe_allow_html=True)
 
-        # Mevcut SQLite veritabanı çizelgesi tablosu
         conn = sqlite3.connect("mesai_takip.db", timeout=10)
-        df_mesai = pd.read_sql_query("SELECT * FROM mesai_kayitlari ORDER BY id DESC LIMIT 10", conn)
+        try:
+            df_mesai = pd.read_sql_query("SELECT * FROM mesai_kayitlari ORDER BY id DESC LIMIT 10", conn)
+        except Exception:
+            df_mesai = pd.DataFrame()
         conn.close()
 
         if not df_mesai.empty:
